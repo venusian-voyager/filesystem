@@ -517,9 +517,16 @@ class Filesystem
      */
     public function hasSameHash(string $firstFile, string $secondFile): bool
     {
-        $hash = @hash_file('xxh128', $firstFile);
+        // Laravel leans on @ to swallow hash_file()'s missing-file warning.
+        // PHPUnit's error handler ignores suppression, and this suite runs with
+        // failOnWarning, so check first instead. Same answer for every input.
+        if (! is_file($firstFile) || ! is_file($secondFile)) {
+            return false;
+        }
 
-        return $hash && hash_equals($hash, (string) @hash_file('xxh128', $secondFile));
+        $hash = hash_file('xxh128', $firstFile);
+
+        return $hash && hash_equals($hash, (string) hash_file('xxh128', $secondFile));
     }
 
     /**
