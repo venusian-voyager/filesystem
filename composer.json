@@ -1,0 +1,42 @@
+{
+    "name": "voyager/filesystem",
+    "description": "The Voyager Filesystem package.",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Angel Gonzalez",
+            "email": "angel@projectsaturnstudios.com"
+        },
+        {
+            "name": "Taylor Otwell"
+        }
+    ],
+    "require": {
+        "php": "^8.4|^8.5",
+        "voyager/collections": "^0.8.0",
+        "voyager/contracts": "^0.8.0",
+        "voyager/macroable": "^0.8.0",
+        "voyager/nuts-and-bolts": "^0.8.0",
+        "symfony/finder": "^7.2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Voyager\\Filesystem\\": ""
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-master": "0.8.x-dev"
+        },
+        "venusian": {
+            "upstream": "laravel/framework",
+            "upstream-ref": "v12.67.0",
+            "upstream-path": "src/Illuminate/Filesystem",
+            "ported-at": "2026-08-19"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "dev"
+}
