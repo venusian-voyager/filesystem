@@ -3,7 +3,7 @@
 namespace Voyager\Filesystem;
 
 use Closure;
-use Voyager\Vessel\Vessel;
+use Voyager\Vessel\ControlPanel as Vessel;
 use Voyager\Contracts\Debug\ExceptionHandler;
 use Voyager\Contracts\Filesystem\Cloud as CloudFilesystemContract;
 use Voyager\Contracts\Filesystem\Filesystem as FilesystemContract;
@@ -14,6 +14,7 @@ use Voyager\NutsAndBolts\DataObjects\Str;
 use Voyager\NutsAndBolts\Concerns\Conditionable;
 use Voyager\NutsAndBolts\Concerns\Macroable;
 use InvalidArgumentException;
+use LogicException;
 use League\Flysystem\FilesystemAdapter as FlysystemAdapter;
 use League\Flysystem\FilesystemOperator;
 use League\Flysystem\Ftp\FtpAdapter;
@@ -589,6 +590,22 @@ class FilesystemAdapter implements CloudFilesystemContract
         }
     }
 
+    /** $length bytes from $offset, through the driver's stream. */
+    public function readRange(string $path, int $offset, int $length): string
+    {
+        $stream = $this->readStream($path) ?: throw new \League\Flysystem\UnableToReadFile("Unable to read file from location: {$path}.");
+
+        try {
+            if ($offset > 0) {
+                // not every adapter's stream seeks; read and drop when it won't
+                fseek($stream, $offset) === 0 || stream_get_contents($stream, $offset);
+            }
+            return (string) stream_get_contents($stream, $length);
+        } finally {
+            fclose($stream);
+        }
+    }
+
     /**
      * {@inheritdoc}
      */
@@ -951,7 +968,7 @@ class FilesystemAdapter implements CloudFilesystemContract
      */
     protected function report(Throwable $exception): void
     {
-        if ($this->shouldReport() && Vessel::getInstance()->bound(ExceptionHandler::class)) {
+        if ($this->shouldReport() && Vessel::getInstance()->isBound(ExceptionHandler::class)) {
             Vessel::getInstance()->make(ExceptionHandler::class)->report($exception);
         }
     }
@@ -964,6 +981,21 @@ class FilesystemAdapter implements CloudFilesystemContract
     protected function shouldReport(): bool
     {
         return (bool) ($this->config['report'] ?? false);
+    }
+
+    /**
+     * This disk with every call sent to a work target: 'sync', 'defer', 'pool', 'concurrency', or the configured default.
+     * Only a configured disk can be offloaded: the worker finds it by name.
+     */
+    public function via(?string $target = null): OffloadedDisk
+    {
+        $name = app('filesystem')->diskName($this);
+
+        if (is_null($name)) {
+            throw new LogicException('This disk is not a configured disk, so a worker could not find it by name. Configure it under filesystems.disks to offload it.');
+        }
+
+        return new OffloadedDisk($name, app('work-targets')->driver($target));
     }
 
     /**

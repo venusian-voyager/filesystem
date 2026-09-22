@@ -18,18 +18,11 @@ class FilesystemServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->registerNativeFilesystem();
-        $this->registerFlysystem();
-    }
+        $this->mergeConfigFrom(__DIR__.'/config/filesystems.php', 'filesystems');
 
-    /**
-     * Register the native filesystem implementation.
-     */
-    protected function registerNativeFilesystem(): void
-    {
-        $this->app->singleton('files', function () {
-            return new Filesystem;
-        });
+        $this->registerFlysystem();
+
+        $this->app->registerSingleton(Storage::class, fn ($app) => new Storage($app['filesystem'], $app['work-targets']));
     }
 
     /**
@@ -39,11 +32,11 @@ class FilesystemServiceProvider extends ServiceProvider
     {
         $this->registerManager();
 
-        $this->app->singleton('filesystem.disk', function ($app) {
+        $this->app->registerSingleton('filesystem.disk', function ($app) {
             return $app['filesystem']->disk($this->getDefaultDriver());
         });
 
-        $this->app->singleton('filesystem.cloud', function ($app) {
+        $this->app->registerSingleton('filesystem.cloud', function ($app) {
             return $app['filesystem']->disk($this->getCloudDriver());
         });
     }
@@ -53,7 +46,7 @@ class FilesystemServiceProvider extends ServiceProvider
      */
     protected function registerManager(): void
     {
-        $this->app->singleton('filesystem', function ($app) {
+        $this->app->registerSingleton('filesystem', function ($app) {
             return new FilesystemManager($app);
         });
     }
