@@ -5,7 +5,7 @@ namespace Voyager\Filesystem;
 use Aws\S3\S3Client;
 use Closure;
 use Voyager\Contracts\Filesystem\Factory as FactoryContract;
-use Voyager\Contracts\System\Application;
+use Voyager\Contracts\Core\FrameworkCore as Application;
 use Voyager\NutsAndBolts\DataObjects\Arr;
 use InvalidArgumentException;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter as S3Adapter;
@@ -106,6 +106,12 @@ class FilesystemManager implements FactoryContract
             'driver' => 'local',
             'root' => $config,
         ]);
+    }
+
+    /** The configured name a disk was resolved under, or null for one built on demand. */
+    public function diskName(FilesystemAdapter $disk): ?string
+    {
+        return array_search($disk, $this->disks, true) ?: null;
     }
 
     /**

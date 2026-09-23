@@ -4,15 +4,15 @@ namespace Voyager\Filesystem;
 
 use ErrorException;
 use FilesystemIterator;
-use Voyager\Contracts\Filesystem\FileNotFoundException;
 use Voyager\NutsAndBolts\LazyCollection;
 use Voyager\NutsAndBolts\Concerns\Conditionable;
 use Voyager\NutsAndBolts\Concerns\Macroable;
 use RuntimeException;
 use SplFileObject;
-use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
 use Symfony\Component\Finder\Finder;
 use Symfony\Component\Mime\MimeTypes;
+use Voyager\Contracts\Filesystem\FileNotFoundException;
+use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
 
 class Filesystem
 {
@@ -768,5 +768,24 @@ class Filesystem
     public function cleanDirectory(string $directory): bool
     {
         return $this->deleteDirectory($directory, true);
+    }
+
+    /** $length bytes from $offset. Blocking, like everything here; a worker calls it so the caller isn't. */
+    public function readRange(string $path, int $offset, int $length): string
+    {
+        $handle = fopen($path, 'rb') ?: throw new FileNotFoundException("File does not exist at path {$path}.");
+
+        try {
+            fseek($handle, $offset);
+            return (string) stream_get_contents($handle, $length);
+        } finally {
+            fclose($handle);
+        }
+    }
+
+    /** This filesystem with every call sent to a work target and answered by a promise. */
+    public function via(?string $target = null): OffloadedFiles
+    {
+        return new OffloadedFiles(app('work-targets')->driver($target));
     }
 }
