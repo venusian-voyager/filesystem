@@ -2,7 +2,6 @@
     "name": "venusian-voyager/filesystem",
     "description": "The Voyager Filesystem package.",
     "license": "MIT",
-    "version": "0.9.0",
     "authors": [
         {
             "name": "Angel Gonzalez",
