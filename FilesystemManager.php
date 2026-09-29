@@ -177,7 +177,7 @@ class FilesystemManager implements FactoryContract
      * @param  array  $config
      * @param  string  $name
      */
-    public function createLocalDriver(array $config, string $name = 'local'): \Voyager\Filesystem\LocalFilesystemAdapter
+    public function createLocalDriver(array $config, string $name = 'local'): \Voyager\Filesystem\FilesystemAdapter
     {
         $visibility = PortableVisibilityConverter::fromArray(
             $config['permissions'] ?? [],
@@ -192,14 +192,7 @@ class FilesystemManager implements FactoryContract
             $config['root'], $visibility, $config['lock'] ?? LOCK_EX, $links
         );
 
-        return (new \Voyager\Filesystem\LocalFilesystemAdapter(
-            $this->createFlysystem($adapter, $config), $adapter, $config
-        ))->diskName(
-            $name
-        )->shouldServeSignedUrls(
-            $config['serve'] ?? false,
-            fn () => $this->app['url'],
-        );
+        return new \Voyager\Filesystem\FilesystemAdapter($this->createFlysystem($adapter, $config), $adapter, $config);
     }
 
     /**

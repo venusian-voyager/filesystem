@@ -5,6 +5,9 @@ namespace Voyager\Filesystem;
 use Closure;
 use League\Flysystem\FilesystemException;
 use Voyager\Vessel\ControlPanel as Vessel;
+use Voyager\Filesystem\Offloading\Offloader;
+use Voyager\Filesystem\Offloading\PathLanes;
+use Voyager\Filesystem\Offloading\SettlingOperator;
 use Voyager\Contracts\Debug\ExceptionHandler;
 use Voyager\Contracts\Filesystem\Cloud as CloudFilesystemContract;
 use Voyager\Contracts\Filesystem\Filesystem as FilesystemContract;
@@ -15,7 +18,6 @@ use Voyager\NutsAndBolts\DataObjects\Str;
 use Voyager\NutsAndBolts\Concerns\Conditionable;
 use Voyager\NutsAndBolts\Concerns\Macroable;
 use InvalidArgumentException;
-use LogicException;
 use League\Flysystem\FilesystemAdapter as FlysystemAdapter;
 use League\Flysystem\FilesystemOperator;
 use League\Flysystem\Ftp\FtpAdapter;
@@ -71,6 +73,11 @@ class FilesystemAdapter implements CloudFilesystemContract
      * The Flysystem PathPrefixer instance.
      */
     protected PathPrefixer $prefixer;
+
+    /**
+     * Orders the offloaded calls by path; made the first time via() is called.
+     */
+    protected ?PathLanes $lanes = null;
 
     /**
      * The file server callback.
@@ -355,9 +362,13 @@ class FilesystemAdapter implements CloudFilesystemContract
             [$path, $file, $options] = ['', $path, $file ?? []];
         }
 
-        $file = is_string($file) ? new File($file) : $file;
+        // A path on this machine gets the name an uploaded file's hashName() gives it: 40 random
+        // characters and the extension its contents call for.
+        $name = is_string($file)
+            ? Str::random(40).(($extension = new Filesystem()->guessExtension($file)) ? '.'.$extension : '')
+            : $file->hashName();
 
-        return $this->putFileAs($path, $file, $file->hashName(), $options);
+        return $this->putFileAs($path, $file, $name, $options);
     }
 
     /**
@@ -995,18 +1006,34 @@ class FilesystemAdapter implements CloudFilesystemContract
     }
 
     /**
-     * This disk with every call sent to a work target: 'sync', 'defer', 'pool', 'concurrency', or the configured default.
-     * Only a configured disk can be offloaded: the worker finds it by name.
+     * This disk with every call run in a pool worker and answered by a promise. The worker builds
+     * the disk from this disk's config, so a disk built on demand or faked offloads like any other.
+     *
+     * @param 'thread'|'process'|null $pool null: the thread pool when it is on, the process pool otherwise
+     * @throws InvalidArgumentException the pool isn't on, or the disk's config holds something that can't cross to a worker
      */
-    public function via(?string $target = null): \Voyager\Filesystem\OffloadedDisk
+    public function via(?string $pool = null): OffloadedDisk
     {
-        $name = \Voyager\Filesystem\app('filesystem')->diskName($this);
+        [$loop, $workers] = Offloader::pool($pool);
 
-        if (is_null($name)) {
-            throw new LogicException('This disk is not a configured disk, so a worker could not find it by name. Configure it under filesystems.disks to offload it.');
+        try {
+            serialize($this->config);
+        } catch (Throwable $e) {
+            throw new InvalidArgumentException(
+                "This disk can't be offloaded: a worker builds it from its config, and the config holds something that can't cross ({$e->getMessage()}).", 0, $e
+            );
         }
 
-        return new \Voyager\Filesystem\OffloadedDisk($name, \Voyager\Filesystem\app('work-targets')->driver($target));
+        // From the first offload on, every blocking call waits for the offloaded ones on its paths.
+        if (is_null($this->lanes)) {
+            $this->lanes = PathLanes::forDisk($loop);
+            $this->driver = new SettlingOperator($this->driver, $this->lanes);
+        }
+
+        $app = Vessel::getInstance();
+        $name = ($app->isBound('filesystem') ? $app->get('filesystem')->diskName($this) : null) ?? 'ondemand';
+
+        return new OffloadedDisk(new Offloader($loop, $workers, $this->lanes, $this->config), $name);
     }
 
     /**
