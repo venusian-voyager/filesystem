@@ -39,9 +39,9 @@ final readonly class Offloader
         $app = ControlPanel::getInstance();
 
         $binding = match ($name) {
-            null => $app->isBound('thread-pool') ? 'thread-pool' : 'process-pool',
-            'thread' => 'thread-pool',
-            'process' => 'process-pool',
+            null => $app->isBound('thread-workers') ? 'thread-workers' : 'process-workers',
+            'thread' => 'thread-workers',
+            'process' => 'process-workers',
             default => throw new InvalidArgumentException(
                 "There is no \"{$name}\" pool: offload to 'thread' or 'process', or name none for the thread pool when it is on and the process pool otherwise."
             ),
