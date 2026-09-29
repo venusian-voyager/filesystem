@@ -18,19 +18,23 @@
         "symfony/filesystem": "^v8.0.0",
         "symfony/finder": "^8.0",
         "symfony/mime": "^v8.0.0",
-        "venusian-voyager/collections": "^0.9.0",
-        "venusian-voyager/contracts": "^0.9.0",
-        "venusian-voyager/macroable": "^0.9.0",
-        "venusian-voyager/nuts-and-bolts": "^0.9.0"
+        "venusian-voyager/collections": "^0.10.0",
+        "venusian-voyager/conditionable": "^0.10.0",
+        "venusian-voyager/contracts": "^0.10.0",
+        "venusian-voyager/macroable": "^0.10.0",
+        "venusian-voyager/nuts-and-bolts": "^0.10.0",
+        "venusian-voyager/vessel": "^0.10.0"
     },
     "suggest": {
-        "venusian-voyager/io-pools": "Required for via(): offloaded calls run on its worker pools (^0.9.0).",
         "aws/aws-sdk-php": "Required to use the s3 driver (^3.322.9).",
+        "ext-fileinfo": "Required to detect the MIME type of local files.",
         "league/flysystem-aws-s3-v3": "Required to use the s3 driver (^3.25.1).",
         "league/flysystem-ftp": "Required to use the ftp driver (^3.25.1).",
-        "league/flysystem-sftp-v3": "Required to use the sftp driver (^3.25.1).",
         "league/flysystem-path-prefixing": "Required to use the prefix disk option (^3.25.1).",
-        "league/flysystem-read-only": "Required to use the read-only disk option (^3.25.1)."
+        "league/flysystem-read-only": "Required to use the read-only disk option (^3.25.1).",
+        "league/flysystem-sftp-v3": "Required to use the sftp driver (^3.25.1).",
+        "psr/http-message": "Required to write PSR-7 streams (^1.0|^2.0).",
+        "venusian-voyager/io-pools": "Required for via(): offloaded calls run on its worker pools (^0.10.0)."
     },
     "autoload": {
         "psr-4": {
@@ -43,7 +47,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.9.x-dev"
+            "dev-main": "0.10.x-dev"
         }
     },
     "config": {
