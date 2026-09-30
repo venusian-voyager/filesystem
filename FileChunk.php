@@ -2,25 +2,29 @@
 
 namespace Voyager\Filesystem;
 
-use Ramsey\Uuid\Uuid;
-use Voyager\Contracts\IOPools\Event;
+use Voyager\Contracts\Signals\NamedSignal;
 
-/** One slice of a file, delivered as mail. Chunks of one stream arrive in offset order. */
-final class FileChunk extends Event
+/**
+ * One chunk of a file a via()->stream() call is reading, delivered as loop mail. Dispatched as
+ * "file:{path}" for the local filesystem, "disk:{disk}:{path}" for a disk.
+ */
+final readonly class FileChunk implements NamedSignal
 {
-    private readonly string $uuid;
-
+    /**
+     * @param string $source "file", or "disk:{disk}"
+     * @param int $offset where in the file the chunk starts
+     * @param bool $last no chunk follows this one
+     */
     public function __construct(
-        public readonly string $disk,
-        public readonly string $path,
-        public readonly int $offset,
-        public readonly string $bytes,
-        public readonly bool $last,
-    ) {
-        $this->uuid = Uuid::uuid4()->toString();
-    }
+        public string $source,
+        public string $path,
+        public int $offset,
+        public string $bytes,
+        public bool $last,
+    ) {}
 
-    public function name(): string { return 'file-chunk:'.$this->disk.':'.$this->path; }
-    public function uuid(): string { return $this->uuid; }
-    public function toData(): array { return ['disk' => $this->disk, 'path' => $this->path, 'offset' => $this->offset, 'bytes' => $this->bytes, 'last' => $this->last]; }
+    public function name(): string
+    {
+        return "{$this->source}:{$this->path}";
+    }
 }

@@ -4,161 +4,110 @@ namespace Voyager\Filesystem;
 
 use Voyager\Contracts\Filesystem\LockTimeoutException;
 
+/**
+ * An open file behind an flock(): read, truncate and write it while the lock is held.
+ */
 class LockableFile
 {
     /**
-     * The file resource.
-     *
      * @var resource
      */
     protected $handle;
 
-    /**
-     * The file path.
-     */
-    protected string $path;
+    protected bool $is_locked = false;
 
-    /**
-     * Indicates if the file is locked.
-     */
-    protected bool $isLocked = false;
-
-    /**
-     * Create a new File instance.
-     */
-    public function __construct(string $path, string $mode)
+    public function __construct(protected readonly string $path, string $mode)
     {
-        $this->path = $path;
-
         $this->ensureDirectoryExists($path);
-        $this->createResource($path, $mode);
-    }
 
-    /**
-     * Create the file's directory if necessary.
-     */
-    protected function ensureDirectoryExists(string $path): void
-    {
-        if (! file_exists(dirname($path))) {
-            @mkdir(dirname($path), 0777, true);
+        $handle = fopen($path, $mode);
+
+        if ($handle === false) {
+            throw new \RuntimeException("Unable to open [{$path}] in mode [{$mode}].");
         }
+
+        $this->handle = $handle;
     }
 
     /**
-     * Create the file resource.
-     *
-     * @throws \Exception
+     * Reads $length bytes from the current position, or the whole file when no length is given.
      */
-    protected function createResource(string $path, string $mode): void
-    {
-        $this->handle = fopen($path, $mode);
-    }
-
-    /**
-     * Read the file contents.
-     */
-    public function read(?int $length = null): string|false
+    public function read(?int $length = null): string
     {
         clearstatcache(true, $this->path);
 
-        return fread($this->handle, $length ?? ($this->size() ?: 1));
+        return (string) fread($this->handle, $length ?? max(1, $this->size()));
     }
 
-    /**
-     * Get the file size.
-     */
-    public function size(): int|false
+    public function size(): int
     {
-        return filesize($this->path);
+        return (int) filesize($this->path);
     }
 
-    /**
-     * Write to the file.
-     *
-     * @return $this
-     */
     public function write(string $contents): static
     {
         fwrite($this->handle, $contents);
-
         fflush($this->handle);
 
         return $this;
     }
 
-    /**
-     * Truncate the file.
-     *
-     * @return $this
-     */
     public function truncate(): static
     {
         rewind($this->handle);
-
         ftruncate($this->handle, 0);
 
         return $this;
     }
 
     /**
-     * Get a shared lock on the file.
-     *
-     * @return $this
-     *
-     * @throws \Voyager\Contracts\Filesystem\LockTimeoutException
+     * @throws LockTimeoutException another process holds an exclusive lock and $block is false
      */
     public function getSharedLock(bool $block = false): static
     {
-        if (! flock($this->handle, LOCK_SH | ($block ? 0 : LOCK_NB))) {
-            throw new LockTimeoutException("Unable to acquire file lock at path [{$this->path}].");
-        }
-
-        $this->isLocked = true;
-
-        return $this;
+        return $this->lock(LOCK_SH, $block);
     }
 
     /**
-     * Get an exclusive lock on the file.
-     *
-     * @return $this
-     *
-     * @throws \Voyager\Contracts\Filesystem\LockTimeoutException
+     * @throws LockTimeoutException another process holds a lock and $block is false
      */
     public function getExclusiveLock(bool $block = false): static
     {
-        if (! flock($this->handle, LOCK_EX | ($block ? 0 : LOCK_NB))) {
-            throw new LockTimeoutException("Unable to acquire file lock at path [{$this->path}].");
-        }
-
-        $this->isLocked = true;
-
-        return $this;
+        return $this->lock(LOCK_EX, $block);
     }
 
-    /**
-     * Release the lock on the file.
-     *
-     * @return $this
-     */
     public function releaseLock(): static
     {
         flock($this->handle, LOCK_UN);
-
-        $this->isLocked = false;
+        $this->is_locked = false;
 
         return $this;
     }
 
-    /**
-     * Close the file.
-     */
     public function close(): bool
     {
-        if ($this->isLocked) {
+        if ($this->is_locked) {
             $this->releaseLock();
         }
 
         return fclose($this->handle);
+    }
+
+    private function lock(int $operation, bool $block): static
+    {
+        if (! flock($this->handle, $operation | ($block ? 0 : LOCK_NB))) {
+            throw new LockTimeoutException("Unable to acquire file lock at path [{$this->path}].");
+        }
+
+        $this->is_locked = true;
+
+        return $this;
+    }
+
+    private function ensureDirectoryExists(string $path): void
+    {
+        if (! is_dir(dirname($path))) {
+            @mkdir(dirname($path), 0777, true);
+        }
     }
 }

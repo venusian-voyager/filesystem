@@ -3,7 +3,11 @@
 namespace Voyager\Filesystem;
 
 use Closure;
+use League\Flysystem\FilesystemException;
 use Voyager\Vessel\ControlPanel as Vessel;
+use Voyager\Filesystem\Offloading\Offloader;
+use Voyager\Filesystem\Offloading\PathLanes;
+use Voyager\Filesystem\Offloading\SettlingOperator;
 use Voyager\Contracts\Debug\ExceptionHandler;
 use Voyager\Contracts\Filesystem\Cloud as CloudFilesystemContract;
 use Voyager\Contracts\Filesystem\Filesystem as FilesystemContract;
@@ -14,7 +18,6 @@ use Voyager\NutsAndBolts\DataObjects\Str;
 use Voyager\NutsAndBolts\Concerns\Conditionable;
 use Voyager\NutsAndBolts\Concerns\Macroable;
 use InvalidArgumentException;
-use LogicException;
 use League\Flysystem\FilesystemAdapter as FlysystemAdapter;
 use League\Flysystem\FilesystemOperator;
 use League\Flysystem\Ftp\FtpAdapter;
@@ -72,6 +75,11 @@ class FilesystemAdapter implements CloudFilesystemContract
     protected PathPrefixer $prefixer;
 
     /**
+     * Orders the offloaded calls by path; made the first time via() is called.
+     */
+    protected ?PathLanes $lanes = null;
+
+    /**
      * The file server callback.
      */
     protected ?Closure $serveCallback = null;
@@ -108,8 +116,9 @@ class FilesystemAdapter implements CloudFilesystemContract
     /**
      * Assert that the given file or directory exists.
      *
-     * @param  string|array  $path
+     * @param string|array $path
      * @return $this
+     * @throws FilesystemException
      */
     public function assertExists(string|array $path, ?string $content = null): static
     {
@@ -212,9 +221,9 @@ class FilesystemAdapter implements CloudFilesystemContract
     /**
      * Determine if a file exists.
      *
-     * @param  string  $path
+     * @param string $path
      */
-    public function fileExists($path): bool
+    public function fileExists(string $path): bool
     {
         return $this->driver->fileExists($path);
     }
@@ -222,9 +231,9 @@ class FilesystemAdapter implements CloudFilesystemContract
     /**
      * Determine if a file is missing.
      *
-     * @param  string  $path
+     * @param string $path
      */
-    public function fileMissing($path): bool
+    public function fileMissing(string $path): bool
     {
         return ! $this->fileExists($path);
     }
@@ -232,9 +241,10 @@ class FilesystemAdapter implements CloudFilesystemContract
     /**
      * Determine if a directory exists.
      *
-     * @param  string  $path
+     * @param string $path
+     * @throws FilesystemException
      */
-    public function directoryExists($path): bool
+    public function directoryExists(string $path): bool
     {
         return $this->driver->directoryExists($path);
     }
@@ -242,9 +252,10 @@ class FilesystemAdapter implements CloudFilesystemContract
     /**
      * Determine if a directory is missing.
      *
-     * @param  string  $path
+     * @param string $path
+     * @throws FilesystemException
      */
-    public function directoryMissing($path): bool
+    public function directoryMissing(string $path): bool
     {
         return ! $this->directoryExists($path);
     }
@@ -252,9 +263,9 @@ class FilesystemAdapter implements CloudFilesystemContract
     /**
      * Get the full path to the file that exists at the given relative path.
      *
-     * @param  string  $path
+     * @param string $path
      */
-    public function path($path): string
+    public function path(string $path): string
     {
         return $this->prefixer->prefixPath($path);
     }
@@ -262,9 +273,11 @@ class FilesystemAdapter implements CloudFilesystemContract
     /**
      * Get the contents of a file.
      *
-     * @param  string  $path
+     * @param string $path
+     * @throws FilesystemException
+     * @throws Throwable
      */
-    public function get($path): ?string
+    public function get(string $path): ?string
     {
         try {
             return $this->driver->read($path);
@@ -280,10 +293,12 @@ class FilesystemAdapter implements CloudFilesystemContract
     /**
      * Get the contents of a file as decoded JSON.
      *
-     * @param  string  $path
-     * @param  int  $flags
+     * @param string $path
+     * @param int $flags
+     * @throws FilesystemException
+     * @throws Throwable
      */
-    public function json($path, $flags = 0): ?array
+    public function json(string $path, int $flags = 0): ?array
     {
         $content = $this->get($path);
 
@@ -293,12 +308,12 @@ class FilesystemAdapter implements CloudFilesystemContract
     /**
      * Write the contents of a file.
      *
-     * @param  string  $path
+     * @param string $path
      * @param  \Psr\Http\Message\StreamInterface|\Voyager\Http\File|\Voyager\Http\UploadedFile|string|resource  $contents
-     * @param  mixed  $options
+     * @param mixed|array $options
      * @return string|bool
      */
-    public function put($path, $contents, $options = [])
+    public function put(string $path, $contents, mixed $options = [])
     {
         $options = is_string($options)
             ? ['visibility' => $options]
@@ -347,9 +362,13 @@ class FilesystemAdapter implements CloudFilesystemContract
             [$path, $file, $options] = ['', $path, $file ?? []];
         }
 
-        $file = is_string($file) ? new File($file) : $file;
+        // A path on this machine gets the name an uploaded file's hashName() gives it: 40 random
+        // characters and the extension its contents call for.
+        $name = is_string($file)
+            ? Str::random(40).(($extension = new Filesystem()->guessExtension($file)) ? '.'.$extension : '')
+            : $file->hashName();
 
-        return $this->putFileAs($path, $file, $file->hashName(), $options);
+        return $this->putFileAs($path, $file, $name, $options);
     }
 
     /**
@@ -578,6 +597,7 @@ class FilesystemAdapter implements CloudFilesystemContract
 
     /**
      * {@inheritdoc}
+     * @throws Throwable
      */
     public function readStream($path)
     {
@@ -590,7 +610,9 @@ class FilesystemAdapter implements CloudFilesystemContract
         }
     }
 
-    /** $length bytes from $offset, through the driver's stream. */
+    /** $length bytes from $offset, through the driver's stream.
+     * @throws Throwable
+     */
     public function readRange(string $path, int $offset, int $length): string
     {
         $stream = $this->readStream($path) ?: throw new \League\Flysystem\UnableToReadFile("Unable to read file from location: {$path}.");
@@ -984,18 +1006,34 @@ class FilesystemAdapter implements CloudFilesystemContract
     }
 
     /**
-     * This disk with every call sent to a work target: 'sync', 'defer', 'pool', 'concurrency', or the configured default.
-     * Only a configured disk can be offloaded: the worker finds it by name.
+     * This disk with every call run in a pool worker and answered by a promise. The worker builds
+     * the disk from this disk's config, so a disk built on demand or faked offloads like any other.
+     *
+     * @param 'thread'|'process'|null $pool null: the thread pool when it is on, the process pool otherwise
+     * @throws InvalidArgumentException the pool isn't on, or the disk's config holds something that can't cross to a worker
      */
-    public function via(?string $target = null): OffloadedDisk
+    public function via(?string $pool = null): OffloadedDisk
     {
-        $name = app('filesystem')->diskName($this);
+        [$loop, $workers] = Offloader::pool($pool);
 
-        if (is_null($name)) {
-            throw new LogicException('This disk is not a configured disk, so a worker could not find it by name. Configure it under filesystems.disks to offload it.');
+        try {
+            serialize($this->config);
+        } catch (Throwable $e) {
+            throw new InvalidArgumentException(
+                "This disk can't be offloaded: a worker builds it from its config, and the config holds something that can't cross ({$e->getMessage()}).", 0, $e
+            );
         }
 
-        return new OffloadedDisk($name, app('work-targets')->driver($target));
+        // From the first offload on, every blocking call waits for the offloaded ones on its paths.
+        if (is_null($this->lanes)) {
+            $this->lanes = PathLanes::forDisk($loop);
+            $this->driver = new SettlingOperator($this->driver, $this->lanes);
+        }
+
+        $app = Vessel::getInstance();
+        $name = ($app->isBound('filesystem') ? $app->get('filesystem')->diskName($this) : null) ?? 'ondemand';
+
+        return new OffloadedDisk(new Offloader($loop, $workers, $this->lanes, $this->config), $name);
     }
 
     /**

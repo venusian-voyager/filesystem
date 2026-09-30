@@ -4,6 +4,9 @@ namespace Voyager\Filesystem;
 
 use Aws\S3\S3Client;
 use Closure;
+use UnitEnum;
+use Voyager\Contracts\Filesystem\Cloud;
+use Voyager\Contracts\Filesystem\Filesystem;
 use Voyager\Contracts\Filesystem\Factory as FactoryContract;
 use Voyager\Contracts\Core\FrameworkCore as Application;
 use Voyager\NutsAndBolts\DataObjects\Arr;
@@ -61,10 +64,10 @@ class FilesystemManager implements FactoryContract
     /**
      * Get a filesystem instance.
      *
-     * @param  string|null  $name
-     * @return \Voyager\Contracts\Filesystem\Filesystem
+     * @param string|null $name
+     * @return Filesystem
      */
-    public function drive($name = null)
+    public function drive(?string $name = null): Filesystem
     {
         return $this->disk($name);
     }
@@ -72,10 +75,10 @@ class FilesystemManager implements FactoryContract
     /**
      * Get a filesystem instance.
      *
-     * @param  \UnitEnum|string|null  $name
-     * @return \Voyager\Contracts\Filesystem\Filesystem
+     * @param UnitEnum|string|null $name
+     * @return Filesystem
      */
-    public function disk($name = null)
+    public function disk(UnitEnum|string|null $name = null): Filesystem
     {
         $name = enum_value($name) ?: $this->getDefaultDriver();
 
@@ -85,9 +88,9 @@ class FilesystemManager implements FactoryContract
     /**
      * Get a default cloud filesystem instance.
      *
-     * @return \Voyager\Contracts\Filesystem\Cloud
+     * @return Cloud
      */
-    public function cloud()
+    public function cloud(): Cloud
     {
         $name = $this->getDefaultCloudDriver();
 
@@ -97,10 +100,10 @@ class FilesystemManager implements FactoryContract
     /**
      * Build an on-demand disk.
      *
-     * @param  string|array  $config
+     * @param array|string $config
      * @return \Voyager\Contracts\Filesystem\Filesystem
      */
-    public function build($config)
+    public function build(array|string $config): Filesystem
     {
         return $this->resolve('ondemand', is_array($config) ? $config : [
             'driver' => 'local',
@@ -174,7 +177,7 @@ class FilesystemManager implements FactoryContract
      * @param  array  $config
      * @param  string  $name
      */
-    public function createLocalDriver(array $config, string $name = 'local'): LocalFilesystemAdapter
+    public function createLocalDriver(array $config, string $name = 'local'): \Voyager\Filesystem\FilesystemAdapter
     {
         $visibility = PortableVisibilityConverter::fromArray(
             $config['permissions'] ?? [],
@@ -189,14 +192,7 @@ class FilesystemManager implements FactoryContract
             $config['root'], $visibility, $config['lock'] ?? LOCK_EX, $links
         );
 
-        return (new LocalFilesystemAdapter(
-            $this->createFlysystem($adapter, $config), $adapter, $config
-        ))->diskName(
-            $name
-        )->shouldServeSignedUrls(
-            $config['serve'] ?? false,
-            fn () => $this->app['url'],
-        );
+        return new \Voyager\Filesystem\FilesystemAdapter($this->createFlysystem($adapter, $config), $adapter, $config);
     }
 
     /**
@@ -204,7 +200,7 @@ class FilesystemManager implements FactoryContract
      *
      * @param  array  $config
      */
-    public function createFtpDriver(array $config): FilesystemAdapter
+    public function createFtpDriver(array $config): \Voyager\Filesystem\FilesystemAdapter
     {
         if (! isset($config['root'])) {
             $config['root'] = '';
@@ -212,7 +208,7 @@ class FilesystemManager implements FactoryContract
 
         $adapter = new FtpAdapter(FtpConnectionOptions::fromArray($config));
 
-        return new FilesystemAdapter($this->createFlysystem($adapter, $config), $adapter, $config);
+        return new \Voyager\Filesystem\FilesystemAdapter($this->createFlysystem($adapter, $config), $adapter, $config);
     }
 
     /**
@@ -220,7 +216,7 @@ class FilesystemManager implements FactoryContract
      *
      * @param  array  $config
      */
-    public function createSftpDriver(array $config): FilesystemAdapter
+    public function createSftpDriver(array $config): \Voyager\Filesystem\FilesystemAdapter
     {
         $provider = SftpConnectionProvider::fromArray($config);
 
@@ -232,7 +228,7 @@ class FilesystemManager implements FactoryContract
 
         $adapter = new SftpAdapter($provider, $root, $visibility);
 
-        return new FilesystemAdapter($this->createFlysystem($adapter, $config), $adapter, $config);
+        return new \Voyager\Filesystem\FilesystemAdapter($this->createFlysystem($adapter, $config), $adapter, $config);
     }
 
     /**
@@ -240,7 +236,7 @@ class FilesystemManager implements FactoryContract
      *
      * @param  array  $config
      */
-    public function createS3Driver(array $config): AwsS3V3Adapter
+    public function createS3Driver(array $config): \Voyager\Filesystem\AwsS3V3Adapter
     {
         $s3Config = $this->formatS3Config($config);
 
@@ -256,7 +252,7 @@ class FilesystemManager implements FactoryContract
 
         $adapter = new S3Adapter($client, $s3Config['bucket'], $root, $visibility, null, $config['options'] ?? [], $streamReads);
 
-        return new AwsS3V3Adapter(
+        return new \Voyager\Filesystem\AwsS3V3Adapter(
             $this->createFlysystem($adapter, $config), $adapter, $s3Config, $client
         );
     }

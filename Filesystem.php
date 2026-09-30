@@ -5,6 +5,8 @@ namespace Voyager\Filesystem;
 use ErrorException;
 use FilesystemIterator;
 use Voyager\NutsAndBolts\LazyCollection;
+use Voyager\Filesystem\Offloading\Offloader;
+use Voyager\Filesystem\Offloading\PathLanes;
 use Voyager\NutsAndBolts\Concerns\Conditionable;
 use Voyager\NutsAndBolts\Concerns\Macroable;
 use RuntimeException;
@@ -18,6 +20,9 @@ class Filesystem
 {
     use Conditionable, Macroable;
 
+    /** Orders the offloaded calls by path; made the first time via() is called. */
+    private ?PathLanes $lanes = null;
+
     /**
      * Determine if a file or directory exists.
      *
@@ -25,6 +30,8 @@ class Filesystem
      */
     public function exists(string $path): bool
     {
+        $this->settle($path);
+
         return file_exists($path);
     }
 
@@ -48,6 +55,8 @@ class Filesystem
      */
     public function get(string $path, bool $lock = false): string
     {
+        $this->settle($path);
+
         if ($this->isFile($path)) {
             return $lock ? $this->sharedGet($path) : file_get_contents($path);
         }
@@ -77,6 +86,8 @@ class Filesystem
      */
     public function sharedGet(string $path): string
     {
+        $this->settle($path);
+
         $contents = '';
 
         $handle = fopen($path, 'rb');
@@ -108,6 +119,8 @@ class Filesystem
      */
     public function getRequire(string $path, array $data = []): mixed
     {
+        $this->settle($path);
+
         if ($this->isFile($path)) {
             $__path = $path;
             $__data = $data;
@@ -132,6 +145,8 @@ class Filesystem
      */
     public function requireOnce(string $path, array $data = []): mixed
     {
+        $this->settle($path);
+
         if ($this->isFile($path)) {
             $__path = $path;
             $__data = $data;
@@ -156,6 +171,8 @@ class Filesystem
      */
     public function lines(string $path): LazyCollection
     {
+        $this->settle($path);
+
         if (! $this->isFile($path)) {
             throw new FileNotFoundException(
                 "File does not exist at path {$path}."
@@ -181,6 +198,8 @@ class Filesystem
      */
     public function hash(string $path, string $algorithm = 'md5'): false|string
     {
+        $this->settle($path);
+
         return hash_file($algorithm, $path);
     }
 
@@ -193,6 +212,8 @@ class Filesystem
      */
     public function put(string $path, string $contents, bool $lock = false): bool|int
     {
+        $this->settle($path);
+
         return file_put_contents($path, $contents, $lock ? LOCK_EX : 0);
     }
 
@@ -205,6 +226,8 @@ class Filesystem
      */
     public function replace(string $path, string $content, ?int $mode = null): void
     {
+        $this->settle($path);
+
         // If the path already exists and is a symlink, get the real path...
         clearstatcache(true, $path);
 
@@ -233,6 +256,8 @@ class Filesystem
      */
     public function replaceInFile(array|string $search, array|string $replace, string $path): void
     {
+        $this->settle($path);
+
         file_put_contents($path, str_replace($search, $replace, file_get_contents($path)));
     }
 
@@ -244,6 +269,8 @@ class Filesystem
      */
     public function prepend(string $path, string $data): bool|int
     {
+        $this->settle($path);
+
         if ($this->exists($path)) {
             return $this->put($path, $data.$this->get($path));
         }
@@ -260,6 +287,8 @@ class Filesystem
      */
     public function append(string $path, string $data, bool $lock = false): int|false
     {
+        $this->settle($path);
+
         return file_put_contents($path, $data, FILE_APPEND | ($lock ? LOCK_EX : 0));
     }
 
@@ -271,6 +300,8 @@ class Filesystem
      */
     public function chmod(string $path, ?int $mode = null): string|bool
     {
+        $this->settle($path);
+
         if ($mode) {
             return chmod($path, $mode);
         }
@@ -285,6 +316,8 @@ class Filesystem
      */
     public function delete(array|string $paths): bool
     {
+        $this->settle(...array_values((array) $paths));
+
         $paths = is_array($paths) ? $paths : func_get_args();
 
         $success = true;
@@ -312,6 +345,8 @@ class Filesystem
      */
     public function move(string $path, string $target): bool
     {
+        $this->settle($path, $target);
+
         return rename($path, $target);
     }
 
@@ -323,6 +358,8 @@ class Filesystem
      */
     public function copy(string $path, string $target): bool
     {
+        $this->settle($path, $target);
+
         return copy($path, $target);
     }
 
@@ -334,6 +371,8 @@ class Filesystem
      */
     public function link(string $target, string $link): ?bool
     {
+        $this->settle($link);
+
         if (! windows_os()) {
             if (function_exists('symlink')) {
                 return symlink($target, $link);
@@ -359,6 +398,8 @@ class Filesystem
      */
     public function relativeLink(string $target, string $link): void
     {
+        $this->settle($link);
+
         if (! class_exists(SymfonyFilesystem::class)) {
             throw new RuntimeException(
                 'To enable support for relative links, please install the symfony/filesystem package.'
@@ -435,6 +476,8 @@ class Filesystem
      */
     public function type(string $path): false|string
     {
+        $this->settle($path);
+
         return filetype($path);
     }
 
@@ -445,6 +488,8 @@ class Filesystem
      */
     public function mimeType(string $path): false|string
     {
+        $this->settle($path);
+
         return finfo_file(finfo_open(FILEINFO_MIME_TYPE), $path);
     }
 
@@ -455,6 +500,8 @@ class Filesystem
      */
     public function size(string $path): int
     {
+        $this->settle($path);
+
         return filesize($path);
     }
 
@@ -465,6 +512,8 @@ class Filesystem
      */
     public function lastModified(string $path): int
     {
+        $this->settle($path);
+
         return filemtime($path);
     }
 
@@ -475,6 +524,8 @@ class Filesystem
      */
     public function isDirectory(string $directory): bool
     {
+        $this->settle($directory);
+
         return is_dir($directory);
     }
 
@@ -486,6 +537,8 @@ class Filesystem
      */
     public function isEmptyDirectory(string $directory, bool $ignoreDotFiles = false): bool
     {
+        $this->settle($directory);
+
         return ! Finder::create()->ignoreDotFiles($ignoreDotFiles)->in($directory)->depth(0)->hasResults();
     }
 
@@ -496,6 +549,8 @@ class Filesystem
      */
     public function isReadable(string $path): bool
     {
+        $this->settle($path);
+
         return is_readable($path);
     }
 
@@ -506,6 +561,8 @@ class Filesystem
      */
     public function isWritable(string $path): bool
     {
+        $this->settle($path);
+
         return is_writable($path);
     }
 
@@ -517,6 +574,8 @@ class Filesystem
      */
     public function hasSameHash(string $firstFile, string $secondFile): bool
     {
+        $this->settle($firstFile, $secondFile);
+
         // Laravel leans on @ to swallow hash_file()'s missing-file warning.
         // PHPUnit's error handler ignores suppression, and this suite runs with
         // failOnWarning, so check first instead. Same answer for every input.
@@ -536,6 +595,8 @@ class Filesystem
      */
     public function isFile(string $file): bool
     {
+        $this->settle($file);
+
         return is_file($file);
     }
 
@@ -548,6 +609,8 @@ class Filesystem
      */
     public function glob(string $pattern, int $flags = 0): array
     {
+        $this->settle(PathLanes::globRoot($pattern));
+
         return glob($pattern, $flags);
     }
 
@@ -560,6 +623,8 @@ class Filesystem
      */
     public function files(array|string $directory, bool $hidden = false, array|string|int $depth = 0): array
     {
+        $this->settle(...array_values((array) $directory));
+
         return iterator_to_array(
             Finder::create()->files()->ignoreDotFiles(! $hidden)->in($directory)->depth($depth)->sortByName(),
             false
@@ -586,6 +651,8 @@ class Filesystem
      */
     public function directories(string $directory, array|string|int $depth = 0): array
     {
+        $this->settle($directory);
+
         $directories = [];
 
         foreach (Finder::create()->in($directory)->directories()->depth($depth)->sortByName() as $dir) {
@@ -629,6 +696,8 @@ class Filesystem
      */
     public function makeDirectory(string $path, int $mode = 0755, bool $recursive = false, bool $force = false): bool
     {
+        $this->settle($path);
+
         if ($force) {
             return @mkdir($path, $mode, $recursive);
         }
@@ -645,6 +714,8 @@ class Filesystem
      */
     public function moveDirectory(string $from, string $to, bool $overwrite = false): bool
     {
+        $this->settle($from, $to);
+
         if ($overwrite && $this->isDirectory($to) && ! $this->deleteDirectory($to)) {
             return false;
         }
@@ -661,6 +732,8 @@ class Filesystem
      */
     public function copyDirectory(string $directory, string $destination, ?int $options = null): bool
     {
+        $this->settle($directory, $destination);
+
         if (! $this->isDirectory($directory)) {
             return false;
         }
@@ -709,6 +782,8 @@ class Filesystem
      */
     public function deleteDirectory(string $directory, bool $preserve = false): bool
     {
+        $this->settle($directory);
+
         if (! $this->isDirectory($directory)) {
             return false;
         }
@@ -747,6 +822,8 @@ class Filesystem
      */
     public function deleteDirectories(string $directory): bool
     {
+        $this->settle($directory);
+
         $allDirectories = $this->directories($directory);
 
         if (! empty($allDirectories)) {
@@ -773,6 +850,8 @@ class Filesystem
     /** $length bytes from $offset. Blocking, like everything here; a worker calls it so the caller isn't. */
     public function readRange(string $path, int $offset, int $length): string
     {
+        $this->settle($path);
+
         $handle = fopen($path, 'rb') ?: throw new FileNotFoundException("File does not exist at path {$path}.");
 
         try {
@@ -783,9 +862,21 @@ class Filesystem
         }
     }
 
-    /** This filesystem with every call sent to a work target and answered by a promise. */
-    public function via(?string $target = null): OffloadedFiles
+    /**
+     * This filesystem with every call run in a pool worker and answered by a promise.
+     *
+     * @param 'thread'|'process'|null $pool null: the thread pool when it is on, the process pool otherwise
+     */
+    public function via(?string $pool = null): OffloadedFiles
     {
-        return new OffloadedFiles(app('work-targets')->driver($target));
+        [$loop, $workers] = Offloader::pool($pool);
+
+        return new OffloadedFiles(new Offloader($loop, $workers, $this->lanes ??= PathLanes::forLocal($loop), null));
+    }
+
+    /** A blocking call waits for the offloaded calls already made on its paths. */
+    private function settle(string ...$paths): void
+    {
+        $this->lanes?->settle(array_values($paths));
     }
 }
