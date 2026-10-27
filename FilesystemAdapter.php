@@ -11,8 +11,8 @@ use Voyager\Filesystem\Offloading\SettlingOperator;
 use Voyager\Contracts\Debug\ExceptionHandler;
 use Voyager\Contracts\Filesystem\Cloud as CloudFilesystemContract;
 use Voyager\Contracts\Filesystem\Filesystem as FilesystemContract;
-use Voyager\Http\File;
-use Voyager\Http\UploadedFile;
+use Voyager\Filesystem\File;
+use Voyager\Filesystem\UploadedFile;
 use Voyager\NutsAndBolts\DataObjects\Arr;
 use Voyager\NutsAndBolts\DataObjects\Str;
 use Voyager\NutsAndBolts\Concerns\Conditionable;
@@ -309,7 +309,7 @@ class FilesystemAdapter implements CloudFilesystemContract
      * Write the contents of a file.
      *
      * @param string $path
-     * @param  \Psr\Http\Message\StreamInterface|\Voyager\Http\File|\Voyager\Http\UploadedFile|string|resource  $contents
+     * @param  \Psr\Http\Message\StreamInterface|\Voyager\Filesystem\File|\Voyager\Filesystem\UploadedFile|string|resource  $contents
      * @param mixed|array $options
      * @return string|bool
      */
@@ -351,8 +351,8 @@ class FilesystemAdapter implements CloudFilesystemContract
     /**
      * Store the uploaded file on the disk.
      *
-     * @param  \Voyager\Http\File|\Voyager\Http\UploadedFile|string  $path
-     * @param  \Voyager\Http\File|\Voyager\Http\UploadedFile|string|array|null  $file
+     * @param  \Voyager\Filesystem\File|\Voyager\Filesystem\UploadedFile|string  $path
+     * @param  \Voyager\Filesystem\File|\Voyager\Filesystem\UploadedFile|string|array|null  $file
      * @param  mixed  $options
      * @return string|false
      */
@@ -374,8 +374,8 @@ class FilesystemAdapter implements CloudFilesystemContract
     /**
      * Store the uploaded file on the disk with a given name.
      *
-     * @param  \Voyager\Http\File|\Voyager\Http\UploadedFile|string  $path
-     * @param  \Voyager\Http\File|\Voyager\Http\UploadedFile|string|array|null  $file
+     * @param  \Voyager\Filesystem\File|\Voyager\Filesystem\UploadedFile|string  $path
+     * @param  \Voyager\Filesystem\File|\Voyager\Filesystem\UploadedFile|string|array|null  $file
      * @param  string|array|null  $name
      * @param  mixed  $options
      * @return string|false

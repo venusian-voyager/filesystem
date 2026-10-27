@@ -12,11 +12,12 @@
         }
     ],
     "require": {
-        "php": "^8.4|^8.5",
+        "php": "~8.4.27||^8.5.12",
         "league/flysystem": "^3.25.1",
         "league/flysystem-local": "^3.25.1",
         "symfony/filesystem": "^v8.0.0",
         "symfony/finder": "^8.0",
+        "symfony/http-foundation": "^8.0.0",
         "symfony/mime": "^v8.0.0",
         "venusian-voyager/collections": "^0.10.0",
         "venusian-voyager/conditionable": "^0.10.0",
@@ -28,6 +29,7 @@
     "suggest": {
         "aws/aws-sdk-php": "Required to use the s3 driver (^3.322.9).",
         "ext-fileinfo": "Required to detect the MIME type of local files.",
+        "ext-gd": "Required to make fake image uploads with Testing\\FileFactory::image().",
         "league/flysystem-aws-s3-v3": "Required to use the s3 driver (^3.25.1).",
         "league/flysystem-ftp": "Required to use the ftp driver (^3.25.1).",
         "league/flysystem-path-prefixing": "Required to use the prefix disk option (^3.25.1).",
