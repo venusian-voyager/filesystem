@@ -634,7 +634,7 @@ class Filesystem
     /**
      * Get every file from the given directory (recursive).
      *
-     * @param  array<int, string>|string  $directory
+     * @param  string  $directory
      * @param  bool  $hidden
      * @return \Symfony\Component\Finder\SplFileInfo[]
      */
